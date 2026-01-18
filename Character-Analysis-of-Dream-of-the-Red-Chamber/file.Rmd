@@ -1,0 +1,514 @@
+---
+title: "111-2 專題製作"
+output: html_notebook
+---
+
+```{r}
+# 紅樓夢
+
+# 安裝文字雲所需套件
+#install.packages("tm")
+#install.packages("wordcloud")
+
+# 安裝相關係數可視化套件
+#install.packages("corrplot")
+
+# 安裝UI套件
+#install.packages("shiny")
+
+# 安裝jaccard套件
+#install.packages("vegan")
+
+```
+
+![](https://i0.wp.com/nightelfmeowmeow.com/wp-content/uploads/2019/08/%E7%B4%85%E6%A8%93%E5%A4%A2%E4%BA%BA%E7%89%A9%E9%97%9C%E4%BF%82%E8%A1%A8-1.png)
+
+```{r}
+# 自定義檔名函數
+file_name_function = function(i){
+  if (i < 10)
+    file_name <- paste0("紅樓夢_第", 0, 0, i, "回")
+  else if (i < 100)
+    file_name <- paste0("紅樓夢_第", 0, i, "回")
+  else
+    file_name <- paste0("紅樓夢_第", i, "回")
+  return(file_name)
+}
+
+# 字數統計函數
+stat_words <- function(file_name){
+  returnValue(sum(nchar(gsub("[，。！？：「」；《》『』——　 【、】1234567890]", "", gsub("\\[", " ", gsub("\\]", " ", gsub("-", " ", gsub("\\“\\”\\〝\\〞", " ", file_name))))))))
+}
+
+# 統計出現幾次特定文字函數
+stat_name <- function(name_matrix, num.hei, name){ # name_matrix <- 欲統計的字詞, num.hei <- 總回數, name <- 儲存的矩陣
+  
+  # 名稱的替代(方便處理)
+  name_matrix_change <- paste("person_", 1:length(name_matrix), "~", sep = "") 
+  name_matrix_change2 <- paste("person_", 1:length(name_matrix), sep = "")
+
+  # 創建矩陣存放各章節人物出現次數
+  name <- matrix(0, nrow = length(name_matrix), ncol = num.hei, dimnames = list(name_matrix, c(1:num.hei)))
+  
+  for (chapter in 1:num.hei){
+    for (i in 1:length(name_matrix)){
+      temp_store_name <- gsub(name_matrix[i], name_matrix_change[i], get(file_name_function(chapter)), fixed = TRUE) # 替換人物名稱並存入x
+      temp_store_name1 <- strsplit(temp_store_name, "~") # 切割字串並以"~"分割
+      name[i, chapter] <- length(grep(name_matrix_change2[i], temp_store_name1[[1]])) # 計算字串被切割幾次並儲存到name
+    }
+  }
+  return(name)
+}
+
+# 文字雲 自訂函數
+library(tm)
+library(wordcloud)
+cloud <- function(input_array, cloud_title) { # imput_array <- 資料, cloud_title <- 文字雲標題
+  wordcloud(names(input_array), input_array, scale = c(4,1), random.order = FALSE, rot.per = 0.1, min.freq = 1, colors = rainbow (40)) #文字雲描述出現次數
+  title(cloud_title)
+}
+# words 參數指定需要繪製詞云的詞；freq 參數指定每個詞的頻率；scale 參數控制字體大小；min.freq 參數指定至少需要出現的次數；random.order 參數控制是否隨機排列詞；rot.per 參數控制字體旋轉的比例；colors 參數指定顏色；... 為其他附加參數
+
+# MDS 自訂函數
+mds <- function(data_matrix, title_1, title_2){
+  # 計算標準化的 MDS 坐標
+  dat <- sweep(data_matrix, 2, colMeans(data_matrix))
+  dat <- sweep(dat, 2, sqrt(diag(var(dat))), "/")
+  loc <- cmdscale(dist(dat))
+  x <- loc[ ,1]
+  y <- loc[ ,2]
+  w <- rownames(loc)
+
+  # 繪製沒有重疊且所有單詞可視圖
+  plot(x, y, type = "n", xlim = c(min(loc[ ,1]) - 5, max(loc[ ,1]) +5), ylim = c(min(loc[ ,2]) - 5, max(loc[ ,2]) + 5))
+  lay <- wordlayout(x, y, w, xlim = c(min(loc[ ,1]) - 5, max(loc[ ,1]) +5), ylim = c(min(loc[ ,2]) - 5, max(loc[ ,2]) + 5))
+  text(lay[ ,1], lay[ ,2], w)
+  title(title_1)
+
+  # 注意部分單詞僅部分可見
+  textplot(x, y, w)
+  title(title_2)
+}
+
+#jaccard自訂函數
+#Jaccard係數是用來衡量兩個集合的相似度。它的計算方法是將兩個集合的交集除以它們的聯集，結果介於0和1之間，數值越大，表示集合之間的相似度越高。
+library(vegan)
+jaccard <- function(data_matrix, title_1, title_2){
+  temp <- vegdist(data_matrix, method = "jaccard")
+  temp <- as.matrix(temp)
+	print(temp)
+  mds(temp, title_1, title_2)
+}
+
+# 統計最多的前number名函數
+top_stat <- function(input_matrix, output_character, number){
+  output_character <- sort(apply(input_matrix, 1, sum), decreasing = TRUE)
+  output_character <- output_character[1:number]
+  return(output_character)
+}
+```
+
+```{r}
+# 將所有章節輸入R
+for (i in 1:120){
+  file_name <- file_name_function(i)
+  assign(file_name, readLines(paste0(file_name, ".txt")))
+  temp <- get(file_name)
+  for (j in 2:length(get(file_name))){
+  temp[1] <- paste0(temp[1], temp[j])
+  }
+  assign(file_name, temp[1])
+}
+
+# 各章節字數統計
+words_per_chapter <- matrix(0, ncol = 120, dimnames = list("words", c(1:120)))
+for (i in 1:120){
+  words_per_chapter[1,i] <- stat_words(get(file_name_function(i)))
+}
+print(words_per_chapter) # 測試字數輸出
+```
+
+```{r}
+# 定義欲探勘之章回
+start_file <- 1 # 起始章節
+end_file <- 120 # 結束章節
+
+total_words <- 0
+cat(paste(paste("起始章節：", file_name_function(start_file)), paste("結束章節：", file_name_function(end_file)), sep = '\n'))
+
+# 計算字數
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{
+  for (i in start_file:end_file){
+    total_words <- total_words + words_per_chapter[1,i]
+  }
+}
+print(paste("共計", total_words, "字(去除空白與標點符號)"))
+```
+
+```{r}
+# 定義人物名稱
+
+# 主要人物名稱
+name_main <- c("賈寶玉", "林黛玉", "薛寶釵", "賈元春", "賈探春", "史湘雲", "妙玉", "賈迎春", "賈惜春", "王熙鳳", "賈巧姐", "李紈", "秦可卿") 
+
+# 別名
+nickname_賈寶玉 <- c("寶玉", "此石", "寶二爺", "怡紅公子", "絳洞花王") 
+nickname_林黛玉 <- c("黛玉", "顰顰", "顰兒", "林姑娘", "林丫頭", "瀟湘妃子")
+nickname_薛寶釵 <- c("寶釵", "蘅蕪君", "寶姐姐", "寶丫頭")
+nickname_賈元春 <- c("元春", "賈妃", "元妃", "貴妃", "大姑娘")
+nickname_賈探春 <- c("探春", "蕉下客", "三姑娘")
+nickname_史湘雲 <- c("湘雲", "枕霞舊友")
+nickname_妙玉 <- c("妙玉", "檻外人")
+nickname_賈迎春 <- c("迎春", "二木頭", "二姑娘")
+nickname_賈惜春 <- c("惜春", "藕榭", "四姑娘")
+nickname_王熙鳳 <- c("熙鳳", "鳳辣子", "璉二奶奶")
+nickname_賈巧姐 <- c("巧姐", "妞妞", "大姐兒")
+nickname_李紈 <- c("李紈", "宮裁", "稻香老農")
+nickname_秦可卿 <- c("可卿", "蓉大奶奶", "兼美","秦氏")
+
+# 其餘人物名稱
+other_name <- c("賈母", "劉姥姥", "香菱", "平兒", "晴雯", "襲人", "紫鵑", "鴛鴦", "薛寶琴") 
+
+#定義要搜尋的人物名稱
+name_matrix <- "小熊維尼" # 給定預設值(後面不會用到)
+for (i in 1:length(name_main)){
+  person_names <- paste0("nickname_", name_main[i]) # 人物別名指定
+  name_matrix <- c(name_matrix, get(person_names)) # 合併至name_matrix
+}
+name_matrix <- c(name_matrix[-1], other_name) # 刪除"小熊維尼"並合併其餘人物
+name_matrix
+
+# 定義回數 120回
+num.hei <- 120
+
+# 統計出現次數函數
+name <- 0 # 宣告有name的存在
+name <- stat_name(name_matrix, num.hei, name)
+name
+
+name_all <- name # 將所有名字存入name_all方便以後分析
+
+# 合併所有重複人物
+total <- 1
+temp_1 <- 0
+name <- matrix(0, nrow = length(c(name_main,other_name)), ncol = num.hei, dimnames = list(c(name_main,other_name), c(1:num.hei)))
+for (i in 1:length(name_main)){
+  temp <- name_all[total:(total + length(get(paste0("nickname_", name_main[i]))) - 1), ]
+  name[i,] <- apply(temp,2,sum)
+  total <- total + length(get(paste0("nickname_", name_main[i])))
+}
+name[(i+1):length(c(name_main,other_name)), ] <- name_all[(length(name_matrix) - length(other_name) + 1):(length(name_matrix)), ]
+name
+
+# 一回內出現最多的次數
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{
+#    times_max <- apply(t(name[ ,start_file:end_file]),2,max)
+#    times_max
+    times_max <- matrix(0, nrow = length(c(name_main,other_name)), ncol = 2, dimnames = list(c(name_main,other_name), c("chapter", "times")))
+    for (i in 1:dim(name)[1]){
+      temp <- 0
+      for (chapter in 1:num.hei){
+        if (name[i,chapter] > temp){
+          temp <- name[i,chapter]
+          times_max[i,1] <- chapter
+          times_max[i,2] <- temp
+        }
+      }
+    }
+    print("一回內出現最多的次數")
+    times_max
+}
+```
+
+```{r}
+# 相關矩陣
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{
+    name_cor <- cor(t(name[ ,start_file:end_file]))
+    name_cor
+  }
+
+library(corrplot)
+# Create a corrgram
+# 相關矩陣(不相關集中在左下)
+corrplot(name_cor,
+         method = 'color',
+         order = 'FPC',
+         type = 'lower',
+         tl.col = "black",
+         diag = FALSE,
+         addCoef.col = 'black',
+         tl.cex = .5,
+         cl.cex = .5,
+         number.cex = .35,
+         main = paste0("第", start_file, "回至第", end_file, "回人物的相關矩陣"))
+```
+
+```{r}
+# 長條圖
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{
+  name_stat <- apply(name[ ,start_file:end_file], 1, sum) # 將name矩陣欲探勘章節所有回數合併
+
+  number <- 10 # 前number名
+  name_stat_10 <- sort(name_stat, decreasing = T)[1:number] # 降冪排列取前number名人物
+  print(name_stat_10)
+  barplot(log = "y", name_stat_10, names.arg = names(name_stat_10), cex.names = 8/(as.numeric(number)), xlab = "人名", ylab = "次數", main = paste0("第", start_file, "回至第", end_file, "回", "前", number, "名人物總出現次數統計表"))
+}
+```
+
+```{r}
+# 人物有出現在哪一回矩陣
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{
+  person_exist <- 1 * (name & TRUE) # 將人物是否出現轉為{0,1}元素
+  person_exist.times <- apply(person_exist, 1, sum) # 出現次數
+  number <- 10 # 前number名
+  person_exist.times.10 <- sort(person_exist.times, decreasing = TRUE)[1:number] # 降冪排列取前number名人物
+  print(person_exist.times.10)
+  barplot(person_exist.times.10, names.arg = names(person_exist.times.10), cex.names = 8/(as.numeric(number)), xlab = "人名", ylab = "次數", main = paste0("第", start_file, "回至第", end_file, "回", "前", number, "名人物出現次數統計表")) # 出現在欲探勘章節中次數最多的前number名人物長條圖
+}
+```
+
+```{r}
+# 人物文字雲
+if (start_file > end_file){
+  print(paste("錯誤！起始章節不可大於結束章節！", start_file, ">" ,end_file))
+  }else{cloud(name_stat, paste("第", start_file, "回至第", end_file, "回人物出現總次數文字雲"))}
+```
+
+```{r}
+# MDS
+mds(name, "MDS人物總出現次數文字雲1", "MDS人物總出現次數文字雲2")
+mds(person_exist, "MDS人物次數文字雲1", "MDS人物次數文字雲2")
+```
+
+```{r}
+# 人物jaccard方法
+jaccard(name, "MDS人物總次數文字雲(jaccard)1", "MDS人物總次數文字雲(jaccard)2")
+```
+
+```{r}
+#  每回中出現的人物數量
+apply(person_exist,2,sum)
+```
+
+```{r}
+#  平均多少字出現一位人物名字
+words_per_chapter / apply(name,2,sum)
+```
+
+```{r}
+# 統計虛詞出現次數
+function_word <- c("之", "乎", "者", "也", "以", "而", "其", "爲", "為", "於", "于", "則", "所", "與", "何", "矣", "乃", "若", "及", "焉", "因", "且", "夫", "在", "哉", "將", "亦", "苟", "耳", "爾", "諸", "或", "兮", "兒", "了", "著", "嗎", "的", "方", "即", "皆", "仍", "故", "尚", "呀", "咧", "啊", "罷", "麼", "呢", "一", "不", "把", "讓", "向", "往", "是", "別", "好", "可", "便", "就", "但", "越", "再", "更", "比", "很", "偏")
+function_word
+
+# 定義回數 120回
+num.hei <- 120
+
+# 統計出現次數函數
+function_word.stat <- 0 # 宣告有name的存在
+function_word.stat <- stat_name(function_word, num.hei, function_word.stat) # 將結果存入function_word.stat
+print("各回出現的虛詞數量")
+apply(function_word.stat,2,sum)
+print("各虛詞出現數量")
+as.matrix(apply(function_word.stat,1,sum))
+
+#將前80回與後40回切割
+function_word.1_80 <- function_word.stat[ ,1:80] # 前80回
+function_word.1_40 <- function_word.stat[ ,1:40] # 前40回
+function_word.41_80 <- function_word.stat[ ,41:80] # 中40回
+function_word.81_120 <- function_word.stat[ ,81:120] # 後40回
+```
+
+```{r}
+# 前80回虛詞出現次數長條圖
+function_word.1_80.stat <- apply(function_word.1_80, 1, sum) # 將1-80所有回數合併
+number <- 10 # 前number名
+function_word.1_80.stat_10 <- sort(function_word.1_80.stat, decreasing = T)[1:number] # 降冪排列取前number名
+function_word.1_80.stat_10
+barplot(log = "y", function_word.1_80.stat_10, names.arg = names(function_word.1_80.stat_10), cex.names = 12.5/(as.numeric(number)), xlab = "虛詞", ylab = "次數", main = paste0("前80回", "前", number, "名虛詞總出現次數統計表"))
+```
+
+```{r}
+# 後40回虛詞出現次數長條圖
+function_word.81_120.stat <- apply(function_word.81_120, 1, sum) # 將81-120所有回數合併
+number <- 10 # 前number名
+function_word.81_120.stat_10 <- sort(function_word.81_120.stat, decreasing = T)[1:number] # 降冪排列取前number名
+function_word.81_120.stat_10
+barplot(log = "y", function_word.81_120.stat_10, names.arg = names(function_word.81_120.stat_10), cex.names = 12.5/(as.numeric(number)), xlab = "虛詞", ylab = "次數", main = paste0("後40回", "前", number, "名虛詞總出現次數統計表"))
+```
+
+```{r}
+# 虛詞文字雲
+cloud(function_word.1_80.stat, "前80回虛詞文字雲") # 前80回虛詞文字雲
+cloud(function_word.81_120.stat, "後40回虛詞文字雲") # 後40回虛詞文字雲
+cloud(apply(function_word.stat,1,sum), "全小說虛詞文字雲") # 全小說虛詞文字雲
+```
+
+```{r}
+# MDS 虛詞
+mds(function_word.stat, "MDS虛詞文字雲1", "MDS虛詞文字雲2")
+```
+
+```{r}
+# 虛詞jaccard方法
+jaccard(function_word.stat, "MDS虛詞文字雲(jaccard)1", "MDS虛詞文字雲(jaccard)2")
+```
+
+```{r}
+# 全小說前number名虛詞
+funcion_word.top_10 <- 0 # 宣告存在
+funcion_word.top_10 <- top_stat(function_word.stat, funcion_word.top_10, 10)
+```
+
+```{r}
+# 拆分前中後各40回之虛字總數
+function_word_sum <- data.frame(row.names = function_word)
+function_word_sum[,1] <- apply(function_word.1_40, 1, sum)
+function_word_sum[,2] <- apply(function_word.41_80, 1, sum)
+function_word_sum[,3] <- apply(function_word.81_120, 1, sum)
+function_word_sum[,4] <- apply(function_word.1_80, 1, sum)
+colnames(function_word_sum) <- c("1-40回", "41-80回", "81-120回", "1-80回") # change column names of all the columns in the dataframe
+function_word_sum
+```
+
+```{r}
+# 對各情況進行 t-test
+# 對兩列進行 t-test
+function_word_t.test_1v41 <- t.test(function_word_sum$`1-40回`, function_word_sum$`41-80回`, paired = TRUE, alternative = "two.sided", var.equal = FALSE)
+# 打印结果
+print(function_word_t.test_1v41)
+
+# 對兩列進行 t-test
+function_word_t.test_1v81 <- t.test(function_word_sum$`1-40回`, function_word_sum$`81-120回`, paired = TRUE, alternative = "two.sided", var.equal = FALSE)
+# 打印结果
+print(function_word_t.test_1v81)
+
+# 對兩列進行 t-test
+function_word_t.test_41v81 <- t.test(function_word_sum$`41-80回`, function_word_sum$`81-120回`, paired = TRUE, alternative = "two.sided", var.equal = FALSE)
+# 打印结果
+print(function_word_t.test_41v81)
+
+#perform Welch's two sample t-test
+# 對兩列進行 t-test
+function_word_t.test_1.80v81 <- t.test(function_word_sum$`1-80回`, function_word_sum$`81-120回`, paired = TRUE, alternative = "two.sided", var.equal = FALSE)
+# 打印结果
+print(function_word_t.test_1.80v81)
+
+# 對兩列進行 t-test
+function_word_t.test_1.40v1.80 <- t.test(function_word_sum$`1-40回`, function_word_sum$`1-80回`, paired = TRUE, alternative = "two.sided", var.equal = FALSE)
+# 打印结果
+print(function_word_t.test_1.40v1.80)
+```
+
+```{r}
+# 分析虛詞前後字詞
+
+num.hei <- 120
+
+for(i in 1:length(funcion_word.top_10)){
+  assign(paste0("function_word_",names(funcion_word.top_10[i])), 0)
+  for(chapter in 1:num.hei){
+    temp <- gsub(paste0(".*", names(funcion_word.top_10[i]), "(.{1}).*"), "\\1", get(file_name_function(chapter))) # 擷取後面一個字
+    assign(paste0("function_word_",names(funcion_word.top_10[i])), c(get(paste0("function_word_",names(funcion_word.top_10[i]))), paste0(names(funcion_word.top_10[i]), temp)))
+    temp <- gsub(paste0(".*(.{1})" , names(funcion_word.top_10[i]), ".*"), "\\1", get(file_name_function(chapter))) # 擷取前面一個字
+    assign(paste0("function_word_",names(funcion_word.top_10[i])), c(get(paste0("function_word_",names(funcion_word.top_10[i]))), paste0(temp, names(funcion_word.top_10[i]))))
+  }
+  assign(paste0("function_word_",names(funcion_word.top_10[i])), get(paste0("function_word_",names(funcion_word.top_10[i])))[2:length(get(paste0("function_word_",names(funcion_word.top_10[i]))))])
+}  
+
+# 將過長字串移除
+for(i in 1:length(funcion_word.top_10)){
+  for(j in 1:length(get(paste0("function_word_",names(funcion_word.top_10[i]))))){
+    if(stat_words(get(paste0("function_word_",names(funcion_word.top_10[i])))[j]) > 2){
+      temp <- get(paste0("function_word_",names(funcion_word.top_10[i])))
+      temp[j] <- "NA"
+      temp <- as.character(temp)
+      assign(paste0("function_word_",names(funcion_word.top_10[i])), temp)
+    }
+  }
+}
+
+# 將重複字串移除
+for(i in 1:length(funcion_word.top_10)){
+  temp_1 <- ""
+  temp <- get(paste0("function_word_",names(funcion_word.top_10[i])))
+  for(j in 1:(length(temp)-1)){
+    for(k in 2:length(temp)){
+     if((temp[j] == temp[k]) && (j != k)){
+        #print(paste(temp[j],temp[k],temp[j] == temp[k]))
+        temp[k] <- ""
+      }
+    }
+    if(stat_words(temp[j]) > 1){
+      temp_1 <- c(temp_1, temp[j])
+    }
+  }
+  temp_1 <- temp_1[-1]
+  assign(paste0("function_word_",names(funcion_word.top_10[i])), temp_1)
+}
+
+# 將所組合之"詞"進行次數搜尋
+for(i in 1:length(funcion_word.top_10)){
+    assign(paste0("function_word_stat_",names(funcion_word.top_10[i])), 0)
+    assign(paste0("function_word_stat_",names(funcion_word.top_10[i])), stat_name(get(paste0("function_word_",names(funcion_word.top_10[i]))), 120, get(paste0("function_word_stat_",names(funcion_word.top_10[i])))))
+    # print(get(paste0("function_word_stat_",names(funcion_word.top_10[i]))))
+}
+
+```
+
+```{r}
+# 加總電腦造詞
+for(i in 1:length(funcion_word.top_10)){
+  temp <- get(paste0("function_word_stat_",names(funcion_word.top_10[i])))
+  assign(paste0("function_word_top_stat_",names(funcion_word.top_10[i])), 0)
+  assign(paste0("function_word_top_stat_",names(funcion_word.top_10[i])), top_stat(temp, get(paste0("function_word_top_stat_",names(funcion_word.top_10[i]))), 10))
+  print(get(paste0("function_word_top_stat_",names(funcion_word.top_10[i]))))
+}
+```
+
+```{r}
+#虛字總數 取log長條圖
+hui.number <- log(as.matrix(apply(function_word.stat,1,sum)))
+sort(hui.number[,1])
+hist(hui.number,
+     freq = FALSE,    
+     main = "time histogram",
+     xlab = "time")
+```
+
+### 參考資料
+
+
+曹雪芹, & 高鶚. (約為乾隆初年). 紅樓夢 (程偉元, Ed.). 維基文庫. https://zh.wikisource.org/zh-hant/紅樓夢
+
+顏守玄. (2021). 互動式資料視覺化之文字探勘以金庸三部小說為例 Interactive Data Visualization of Text Mining to Jin Yong Three Novels
+. 臺灣博碩士論文知識加值系統. https://hdl.handle.net/11296/9a2p75
+
+喵喵. (2020, May 4). ▌讀 | CN ▌紅樓夢 | 人物關係表 | 四大家族 | 寶玉、黛玉、寶釵血緣關係 | 5 分鐘弄懂紅樓夢人物關係 | 淺談紅樓夢 | 2022. NightelfMeowMeow. https://nightelfmeowmeow.com/378/1105014-reading-cn-novel-dream-of-the-red-chamber-family-tree/
+
+文言/虛詞. (2023, February 18). 維基教科書. https://zh.wikibooks.org/zh-tw/%E6%96%87%E8%A8%80/%E8%99%9B%E8%A9%9E
+
+上海數據分析網. (2017, October 27). 數據分析看《紅樓夢》作者. 每日頭條. https://kknews.cc/zh-tw/culture/z2m9mgl.html
+
+余清祥. (1998, May). 統計在紅樓夢的應用. 政大機構典藏. http://nccur.lib.nccu.edu.tw/handle/140.119/103224
+
+杜協昌. (2012, November 30). 利用文本採礦探討《紅樓夢》的後四十回作者爭議. DocuSky 數位人文學術研究平台. https://docusky.org.tw/Paper/DADH2012_Text_Mining_DreamOfTheRedChamber/slide.pdf
+
+陳佳琳. (2021, October). 以文風指標分析《紅樓夢》的作者爭議問題 Solving the Author Problem of “Dream of the Red Chamber” with the Writing Style Indicator (楊昌彪, Ed.). 臺灣博碩士論文知識加值系統. https://hdl.handle.net/11296/vvu95e
+
+李賢平.《紅樓夢》成書新說. 復旦學報(社會科學版). 1987年第5期.
+
+MDS - wordcloud 參考網站
+[https://rdrr.io/rforge/wordcloud/man/wordlayout.html](https://rdrr.io/rforge/wordcloud/man/wordlayout.html)
+
+jaccard 參考網站
+https://www.r-bloggers.com/2021/11/how-to-calculate-jaccard-similarity-in-r/
